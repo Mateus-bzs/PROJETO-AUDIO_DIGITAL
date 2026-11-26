@@ -1,10 +1,108 @@
-(function(){
-  const wave=document.getElementById('wave-path'),dots=document.getElementById('sample-points'),lines=document.getElementById('quant-lines');if(!wave)return;
-  const points=16,cx=55,span=620,mid=120,amp=76,period=2*Math.PI;let phase=0,running=true,last=0,raf=0;
-  const yAt=x=>mid-amp*Math.sin((x-cx)/span*period+phase);
-  wave.setAttribute('d',Array.from({length:150},(_,i)=>{const x=cx+i*span/149;return `${i?'L':'M'}${x.toFixed(1)},${yAt(x).toFixed(1)}`}).join(' '));
-  for(let i=0;i<points;i++){const x=cx+i*span/(points-1);const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('r','6');dot.dataset.x=x;dots.append(dot);const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1',String(x-10));line.setAttribute('x2',String(x+10));lines.append(line)}
-  const speed=document.getElementById('anim-speed'),label=document.getElementById('speed-value'),play=document.getElementById('anim-play');
-  function render(t){if(running){phase+=(t-last||0)*.0008*Number(speed.value);last=t;wave.setAttribute('d',Array.from({length:150},(_,i)=>{const x=cx+i*span/149;return `${i?'L':'M'}${x.toFixed(1)},${yAt(x).toFixed(1)}`}).join(' '));dots.querySelectorAll('circle').forEach(d=>{const x=Number(d.dataset.x),y=yAt(x);d.setAttribute('cy',String(y));d.dataset.y=y});lines.querySelectorAll('line').forEach((line,i)=>{const x=cx+i*span/(points-1),y=yAt(x),qy=mid+Math.round((y-mid)/20)*20;line.setAttribute('y1',String(qy));line.setAttribute('y2',String(qy))});last=t}raf=requestAnimationFrame(render)}
-  play.addEventListener('click',()=>{running=!running;play.textContent=running?'Pausar animação':'Reproduzir animação';if(running)last=0});document.getElementById('anim-reset').addEventListener('click',()=>{phase=0;last=0;running=true;play.textContent='Pausar animação'});speed.addEventListener('input',()=>label.textContent=`${speed.value}×`);render(0);
+(() => {
+  const onda = document.getElementById('wave-path');
+  if (!onda) return;
+
+  const grupoAmostras = document.getElementById('sample-points');
+  const grupoNiveis = document.getElementById('quant-lines');
+  const controleVelocidade = document.getElementById('anim-speed');
+  const indicadorVelocidade = document.getElementById('speed-value');
+  const botaoPausar = document.getElementById('anim-play');
+  const botaoReiniciar = document.getElementById('anim-reset');
+
+  const namespaceSvg = 'http://www.w3.org/2000/svg';
+  const quantidadeAmostras = 16;
+  const inicioX = 55;
+  const largura = 620;
+  const centroY = 120;
+  const amplitude = 76;
+  const passoQuantizacao = 20;
+
+  let fase = 0;
+  let rodando = true;
+  let tempoAnterior = null;
+
+  // Calcula a posição vertical da onda para uma posição horizontal.
+  function obterPosicaoY(x) {
+    const angulo = ((x - inicioX) / largura) * 2 * Math.PI;
+    return centroY - amplitude * Math.sin(angulo + fase);
+  }
+
+  // Cria os círculos e os traços do SVG uma única vez.
+  const amostras = Array.from({ length: quantidadeAmostras }, (_, indice) => {
+    const x = inicioX + (indice * largura) / (quantidadeAmostras - 1);
+
+    const circulo = document.createElementNS(namespaceSvg, 'circle');
+    circulo.setAttribute('r', '6');
+    circulo.setAttribute('cx', String(x));
+    grupoAmostras.append(circulo);
+
+    const traco = document.createElementNS(namespaceSvg, 'line');
+    traco.setAttribute('x1', String(x - 10));
+    traco.setAttribute('x2', String(x + 10));
+    grupoNiveis.append(traco);
+
+    return { x, circulo, traco };
+  });
+
+  function desenharQuadro() {
+    // Redesenha a curva usando 150 pontos ao longo do gráfico.
+    const caminho = Array.from({ length: 150 }, (_, indice) => {
+      const x = inicioX + (indice * largura) / 149;
+      const y = obterPosicaoY(x);
+      const comando = indice === 0 ? 'M' : 'L';
+
+      return `${comando}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+
+    onda.setAttribute('d', caminho);
+
+    for (const { x, circulo, traco } of amostras) {
+      // Amostragem: o círculo acompanha a altura da onda nessa posição.
+      const y = obterPosicaoY(x);
+      circulo.setAttribute('cy', String(y));
+
+      // Quantização: o traço marca o nível discreto mais próximo.
+      const deslocamento = y - centroY;
+      const nivel = Math.round(deslocamento / passoQuantizacao);
+      const yQuantizado = centroY + nivel * passoQuantizacao;
+
+      traco.setAttribute('y1', String(yQuantizado));
+      traco.setAttribute('y2', String(yQuantizado));
+    }
+  }
+
+  function animar(tempoAtual) {
+    // A fase avança conforme o tempo e a velocidade selecionada.
+    if (rodando) {
+      const tempoDecorrido = tempoAtual - (tempoAnterior ?? tempoAtual);
+      fase += tempoDecorrido * 0.0008 * Number(controleVelocidade.value);
+      tempoAnterior = tempoAtual;
+      desenharQuadro();
+    }
+
+    requestAnimationFrame(animar);
+  }
+
+  botaoPausar.addEventListener('click', () => {
+    rodando = !rodando;
+    tempoAnterior = null;
+    botaoPausar.textContent = rodando
+      ? 'Pausar animação'
+      : 'Reproduzir animação';
+  });
+
+  botaoReiniciar.addEventListener('click', () => {
+    fase = 0;
+    tempoAnterior = null;
+    rodando = true;
+    botaoPausar.textContent = 'Pausar animação';
+    desenharQuadro();
+  });
+
+  controleVelocidade.addEventListener('input', () => {
+    indicadorVelocidade.textContent = `${controleVelocidade.value}×`;
+  });
+
+  desenharQuadro();
+  requestAnimationFrame(animar);
 })();
